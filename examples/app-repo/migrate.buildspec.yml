@@ -1,0 +1,27 @@
+# Lives in the APP repo at ci/migrate.buildspec.yml — CodeBuild runs this inside the VPC.
+# The service stack injects:
+#   DB_HOST, DB_PORT      - the shared RDS endpoint (from foundation)
+#   MIGRATE_CONNECTIONS   - JSON map { "<db_name>": "<SSM param with its connection string>" }
+#                           of the databases THIS app owns (migrate=true). Usually one; an app
+#                           like authprovider owns two (AuthProvider + IdentityProvider).
+# The CodeBuild role has GetParameter + kms:Decrypt on those params. EF Core `database update`
+# creates the database on first run (the connection string uses the master credential).
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      dotnet: 8.0
+    commands:
+      - dotnet tool install --global dotnet-ef
+  build:
+    commands:
+      # One EF Core context per owned database. Map each db_name to its --context in your app.
+      - |
+        for DB in $(echo "$MIGRATE_CONNECTIONS" | jq -r 'keys[]'); do
+          PARAM=$(echo "$MIGRATE_CONNECTIONS" | jq -r --arg d "$DB" '.[$d]')
+          CONN=$(aws ssm get-parameter --name "$PARAM" --with-decryption --query 'Parameter.Value' --output text)
+          echo "Migrating $DB on $DB_HOST:$DB_PORT"
+          # Example (EF Core) — pick the context that maps to $DB:
+          # dotnet ef database update --connection "$CONN" --context "${DB}Context"
+        done

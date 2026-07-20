@@ -1,0 +1,44 @@
+# Variables for a service workspace (one per app).
+client               = "sayer"
+app                  = "webapi"
+environment          = "dev"
+aws_region           = "us-east-1"
+
+tfc_organization     = "REPLACE_ORG"
+foundation_workspace = "sayer-dev-foundation"
+
+# ECR repo (sayer-webapi-dev) is created by the foundation stack; the URI is composed
+# from foundation's ecr_repository_urls[app] + this version. Bump to promote a release.
+# Injected as env vars: APP_VERSION = this value, APP_VERSION_DATE = auto-stamped when it changes.
+image_version  = "1.0.0"
+container_port = "8080"
+health_path    = "/health"
+subdomain      = "api.sayer.ecolors.app"
+
+# Databases this app connects to (all live on the client-env's shared RDS in foundation).
+# Each becomes ConnectionStrings__<key>. Exactly one migrate=true = this app's own db (the one
+# EF Core migrates); the rest are use-only (migrated by their owning app).
+connections = [
+  { key = "Licensee", db_name = "sayer", migrate = true },
+  # Cross-env shared db (another client-env / account): set `source` to its foundation workspace.
+  # { key = "Admin", db_name = "EColorsAdminProd", source = "ecolors-prod-foundation" },
+]
+
+# App config (.NET Key__Child) — plaintext, overrides appsettings.json. Set by the factory
+# from each app's `settings`.
+runtime_env = {
+  "ASPNETCORE_ENVIRONMENT"         = "Production"
+  "Serilog__MinimumLevel__Default" = "Information"
+}
+
+# Names of secret env vars (set by the factory from `secret_settings`).
+secret_settings = ["Jwt__SigningKey"]
+# Their VALUES — set this as a SENSITIVE variable on the workspace, never commit real secrets:
+# secret_values = { "Jwt__SigningKey" = "..." }
+
+github_repo = "CodeQuality-Uyu/sayer-web-api"
+
+# Optional blobs
+create_blobs      = false
+# blobs_bucket_name = "sayer-dev-blobs"
+# blobs_domain      = "assets.sayer.ecolors.app"

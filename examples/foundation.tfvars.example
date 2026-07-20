@@ -1,0 +1,28 @@
+# Variables for a foundation workspace (one per client-env).
+client      = "sayer"
+environment = "dev"
+aws_region  = "us-east-1"
+vpc_cidr    = "10.20.0.0/16"
+zone_name   = "sayer.ecolors.app"
+create_zone = true
+enable_nat  = true
+
+# App slugs → one ECR repo ({client}-{app}-{env}) each.
+apps = ["webapi"]
+
+# Databases to create on the shared RDS (the distinct set your apps connect to). The factory
+# derives this from all apps' `connections`; set it by hand only when applying foundation alone.
+databases = ["sayer"]
+
+# Cross-account sharing (set by the factory; here for reference). If another client-env references
+# a db of THIS one, the factory sets db_public = true and lists the consumer foundations whose NAT
+# EIPs get allowlisted on the (now public) RDS.
+# db_public              = false
+# db_consumer_workspaces = []   # e.g. ["sayer-prod-foundation", "ulbrika-prod-foundation"]
+
+# Shared RDS (one instance per client-env). Tune per environment.
+db_instance_class      = "db.t4g.micro"
+db_multi_az            = false
+# For nonprod you may prefer: db_deletion_protection = false, db_skip_final_snapshot = true
+db_deletion_protection = true
+db_skip_final_snapshot = false

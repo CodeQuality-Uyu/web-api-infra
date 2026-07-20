@@ -1,0 +1,42 @@
+# Lives in the APP repo as .github/workflows/migrate.yml
+# Runs DB migrations by triggering the CodeBuild-in-VPC project the service stack created.
+name: migrate
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: [build-and-push]
+    types: [completed]
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  # From the service workspace output `migration_ci_role_arn` / `migration_codebuild_project`
+  CI_ROLE_ARN: arn:aws:iam::111122223333:role/sayer-webapi-dev-migrate-ci
+  PROJECT: sayer-webapi-dev-migrate
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.CI_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Start migration build and wait
+        run: |
+          ID=$(aws codebuild start-build --project-name "$PROJECT" \
+                 --source-version "${{ github.sha }}" \
+                 --query 'build.id' --output text)
+          echo "Started $ID"
+          while true; do
+            S=$(aws codebuild batch-get-builds --ids "$ID" \
+                  --query 'builds[0].buildStatus' --output text)
+            echo "status=$S"
+            [ "$S" = "SUCCEEDED" ] && break
+            case "$S" in FAILED|FAULT|TIMED_OUT|STOPPED) echo "migration failed"; exit 1;; esac
+            sleep 15
+          done

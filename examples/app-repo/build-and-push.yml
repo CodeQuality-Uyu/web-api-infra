@@ -1,0 +1,38 @@
+# Lives in the APP repo (e.g. CodeQuality-Uyu/sayer-web-api) as .github/workflows/build.yml
+# Builds an immutable, versioned image. Releasing = push a git tag like v1.4.0; then bump
+# `version` in web-api-infra/clients.auto.tfvars, apply the factory, and run the service
+# workspace to promote it (App Runner auto_deploy is off — Terraform owns the running version).
+name: build-and-push
+on:
+  push:
+    tags: ["v*"] # e.g. v1.4.0 -> image tag 1.4.0
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPO: sayer-webapi-dev # {client}-{app}-{env}, created by the foundation stack
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::111122223333:role/gha-ecr-push # your ECR-push role
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: aws-actions/amazon-ecr-login@v2
+        id: ecr
+
+      - name: Build & push immutable version
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"   # v1.4.0 -> 1.4.0
+          IMAGE="${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPO }}:${VERSION}"
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+          echo "Pushed $IMAGE — set version = \"${VERSION}\" in clients.auto.tfvars to promote."
