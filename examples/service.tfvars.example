@@ -2,7 +2,8 @@
 client               = "sayer"
 app                  = "webapi"
 environment          = "dev"
-aws_region           = "us-east-1"
+# Region is fixed to us-east-1 in the stack's provider — not a variable.
+aws_account_id       = "111111111111" # guardrail: plan fails on a credential from another account
 
 tfc_organization     = "REPLACE_ORG"
 foundation_workspace = "sayer-dev-foundation"
@@ -38,7 +39,13 @@ secret_settings = ["Jwt__SigningKey"]
 
 github_repo = "CodeQuality-Uyu/sayer-web-api"
 
-# Optional blobs
-create_blobs      = false
-# blobs_bucket_name = "sayer-dev-blobs"
-# blobs_domain      = "assets.sayer.ecolors.app"
+# Optional blobs (multimedia: product images via CDN, downloadable Excels, ...).
+# Normally you don't set these by hand — the factory derives them from the backend's `blobs`
+# block in clients.auto.tfvars. Shown here for a standalone service workspace.
+create_blobs = false
+# blobs_bucket_name      = "sayer-webapi-prod-blobs"     # default {client}-{app}-{env}-blobs
+# blobs_domain           = "assets.sayer.ecolors.app"    # CDN domain, under the client-env zone
+# blobs_allowed_origins  = ["https://sayer.ecolors.app"] # who may presigned-PUT (usually the SPA)
+# blobs_temporary_object = "temporary"                   # must match the app's Blob:TemporaryObject
+# The app also receives Blob__BucketName / Blob__CloudFrontDomain / Blob__TemporaryObject /
+# AWS__Region automatically, and the instance role gets S3 R/W on the bucket.

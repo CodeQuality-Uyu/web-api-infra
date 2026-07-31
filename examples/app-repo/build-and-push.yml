@@ -1,29 +1,49 @@
-# Lives in the APP repo (e.g. CodeQuality-Uyu/sayer-web-api) as .github/workflows/build.yml
-# Builds an immutable, versioned image. Releasing = push a git tag like v1.4.0; then bump
-# `version` in web-api-infra/clients.auto.tfvars, apply the factory, and run the service
-# workspace to promote it (App Runner auto_deploy is off — Terraform owns the running version).
+# Lives in the BACKEND repo (e.g. CodeQuality-Uyu/ecolors-web-api) as .github/workflows/build.yml
+#
+# Model — declarative version, promoted in git (NOT by this workflow):
+#   1. Release = push a git tag. This builds an IMMUTABLE image and pushes it to ECR.
+#   2. To make a service RUN that image, bump its `version` in
+#      web-api-infra/factory/clients.auto.tfvars and let the service workspace apply.
+#      App Runner auto_deploy is off — Terraform owns the running version. This workflow
+#      never touches Terraform, TFC variables, or the running service.
+#
+# Naming (owned by the foundation stack, do NOT create repos here):
+#   ECR repo   = {client}-{app}-{env}    e.g. ecolors-admin-webapi-nonprod
+#   Image tag  = the version             e.g. 1.4.0
+#
+# Monorepo: this repo builds several services selected by the PROJECT build-arg. Each service
+# maps to its own ECR repo. The matrix below is one account/client-env; a monorepo that feeds
+# several licensee ACCOUNTS repeats this job per target (each with that account's role + repos).
 name: build-and-push
 on:
   push:
-    tags: ["v*"] # e.g. v1.4.0 -> image tag 1.4.0
+    # Per-service tags, e.g. admin-v1.4.0 / licensee-v1.4.0. Plain v1.4.0 builds all services.
+    tags: ["v*", "admin-v*", "licensee-v*"]
 
 permissions:
   id-token: write
   contents: read
 
 env:
-  AWS_REGION: us-east-1
-  ECR_REPO: sayer-webapi-dev # {client}-{app}-{env}, created by the foundation stack
+  AWS_REGION: us-east-1 # everything deploys in us-east-1
+  # The github-deploy role in the target account (foundation output: github_deploy_role_arn).
+  DEPLOY_ROLE_ARN: arn:aws:iam::273733837144:role/github-deploy
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          # service = PROJECT build-arg ; ecr_repo = {client}-{app}-{env}
+          - { service: admin, ecr_repo: ecolors-admin-webapi-nonprod }
+          - { service: licensee, ecr_repo: ecolors-seller-webapi-nonprod }
     steps:
       - uses: actions/checkout@v4
 
       - uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::111122223333:role/gha-ecr-push # your ECR-push role
+          role-to-assume: ${{ env.DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
       - uses: aws-actions/amazon-ecr-login@v2
@@ -31,8 +51,10 @@ jobs:
 
       - name: Build & push immutable version
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"   # v1.4.0 -> 1.4.0
-          IMAGE="${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPO }}:${VERSION}"
-          docker build -t "$IMAGE" .
+          # Tag -> version:  v1.4.0 / admin-v1.4.0 / licensee-v1.4.0  ->  1.4.0
+          VERSION="${GITHUB_REF_NAME##*v}"
+          IMAGE="${{ steps.ecr.outputs.registry }}/${{ matrix.ecr_repo }}:${VERSION}"
+          docker build --build-arg PROJECT=${{ matrix.service }} -t "$IMAGE" .
           docker push "$IMAGE"
-          echo "Pushed $IMAGE — set version = \"${VERSION}\" in clients.auto.tfvars to promote."
+          echo "Pushed $IMAGE"
+          echo "Promote: set version = \"${VERSION}\" for this backend in clients.auto.tfvars."

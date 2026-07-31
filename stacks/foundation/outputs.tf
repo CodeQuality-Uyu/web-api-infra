@@ -49,6 +49,11 @@ output "ecr_repository_urls" {
   value       = module.ecr.repository_urls
 }
 
+output "github_deploy_role_arn" {
+  description = "ARN GitHub Actions assumes to push images + sync frontends. Null when no repos are wired."
+  value       = length(module.github_deploy) > 0 ? module.github_deploy[0].role_arn : null
+}
+
 # --- Shared RDS (consumed by every service stack for this client-env) ---
 output "db_address" {
   value = module.database.db_address

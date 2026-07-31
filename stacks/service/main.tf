@@ -31,6 +31,22 @@ locals {
 
   # Secret env vars -> their SSM SecureString ARNs, injected as App Runner runtime secrets.
   secret_env_arns = { for k, p in aws_ssm_parameter.secret : k => p.arn }
+
+  # Blob storage config, injected so the app's BlobSection binds without hand-editing settings.
+  # Only the values the app can't infer on its own:
+  #   - BucketName / CloudFrontDomain: infra-derived, no sensible static default.
+  #   - Type=aws: makes the AWS provider bind even if ASPNETCORE_ENVIRONMENT != Production.
+  # TemporaryObject is injected ONLY when overridden (the app and the bucket lifecycle both default
+  # to "temporary"). Region isn't injected — App Runner sets AWS_REGION and the SDK reads it.
+  # Reads are served from CloudFront ({domain}/{key}); uploads use presigned PUT against the bucket.
+  blobs_env = var.create_blobs ? merge(
+    {
+      "Blob__Type"             = "aws"
+      "Blob__BucketName"       = var.blobs_bucket_name
+      "Blob__CloudFrontDomain" = module.blobs[0].cloudfront_domain
+    },
+    var.blobs_temporary_object != "temporary" ? { "Blob__TemporaryObject" = var.blobs_temporary_object } : {},
+  ) : {}
 }
 
 # Captures the release timestamp. `triggers` recomputes the stamp ONLY when image_version
@@ -68,13 +84,18 @@ module "service" {
   domain_fqdn      = var.subdomain
   zone_id          = local.f.zone_id
 
-  runtime_env     = merge(var.runtime_env, local.version_env)
+  # blobs_env first (lowest precedence): a plain `settings` entry in clients.auto.tfvars overrides
+  # any auto value, and version_env always wins.
+  runtime_env     = merge(local.blobs_env, var.runtime_env, local.version_env)
   runtime_secrets = merge(local.db_conn_secret_arns, local.secret_env_arns)
   secret_source_arns = concat(
     values(local.db_conn_secret_arns),
     values(local.secret_env_arns),
   )
   kms_key_arns = [local.f.db_connection_string_kms_key_arn]
+
+  # Runtime S3 access to the blobs bucket (Get/Put/Delete + List). Null when blobs are off.
+  blobs_bucket_arn = var.create_blobs ? module.blobs[0].bucket_arn : null
 
   tags = local.tags
 }
@@ -113,10 +134,11 @@ module "blobs" {
     aws.us_east_1 = aws.us_east_1
   }
 
-  name            = local.name
-  bucket_name     = var.blobs_bucket_name
-  domain_fqdn     = var.blobs_domain
-  zone_id         = local.f.zone_id
-  allowed_origins = var.blobs_allowed_origins
-  tags            = local.tags
+  name             = local.name
+  bucket_name      = var.blobs_bucket_name
+  domain_fqdn      = var.blobs_domain
+  zone_id          = local.f.zone_id
+  allowed_origins  = var.blobs_allowed_origins
+  temporary_folder = var.blobs_temporary_object
+  tags             = local.tags
 }

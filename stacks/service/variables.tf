@@ -14,9 +14,10 @@ variable "environment" {
   type        = string
 }
 
-variable "aws_region" {
-  type    = string
-  default = "us-east-1"
+variable "aws_account_id" {
+  description = "AWS account this app must deploy into. Enforced via allowed_account_ids. Set by the factory."
+  type        = string
+  default     = null
 }
 
 # --- Foundation (this client's) remote state ---
@@ -49,6 +50,27 @@ variable "health_path" {
 variable "cpu" {
   type    = string
   default = "1024"
+}
+
+# --- Optional overnight pause (nonprod cost saving) ---
+# When set, EventBridge Scheduler pauses/resumes this App Runner service on a cron (App Runner
+# doesn't bill provisioned instances while paused). Crons are in `schedule_timezone`.
+variable "pause_cron" {
+  description = "Cron to PAUSE the service, e.g. \"cron(0 2 * * ? *)\". Null = never pause."
+  type        = string
+  default     = null
+}
+
+variable "resume_cron" {
+  description = "Cron to RESUME the service, e.g. \"cron(0 7 * * ? *)\"."
+  type        = string
+  default     = null
+}
+
+variable "schedule_timezone" {
+  description = "IANA timezone for the pause/resume crons."
+  type        = string
+  default     = "America/Montevideo"
 }
 
 variable "memory" {
@@ -125,8 +147,15 @@ variable "blobs_domain" {
 }
 
 variable "blobs_allowed_origins" {
-  type    = list(string)
-  default = []
+  description = "Browser origins allowed to upload directly to the blobs bucket via presigned PUT (S3 CORS). Usually the SPA origins that call this backend."
+  type        = list(string)
+  default     = []
+}
+
+variable "blobs_temporary_object" {
+  description = "Prefix for freshly-uploaded objects; expires after 1 day (lifecycle) and the app moves confirmed objects out of it. Must match the app's Blob:TemporaryObject."
+  type        = string
+  default     = "temporary"
 }
 
 variable "tags" {

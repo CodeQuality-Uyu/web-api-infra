@@ -15,13 +15,17 @@ workspaces. A single repo (this one) is the template; each client/app is a works
 
 ## Layout
 ```
-modules/    network · dns · ecr · database · service (App Runner) · migrations · blobs
+modules/    network · dns · ecr · database · service (App Runner) · migrations · blobs · frontend · account-oidc · dns-delegation-role
 stacks/
+  bootstrap/      per AWS account (once): OIDC provider + tfc-deploy / tfc-org-admin role (by hand)
+  management/     the root account: org + OUs + SCPs + account vending + Identity Center (billing)
+  infrastructure/ shared platform account: parent DNS zone (ecolors.app) + dns-delegation role
   foundation/   per client-env: VPC + SSM bastion + hosted zone + GitHub OIDC + ECR repos + shared RDS
   service/      per app:        App Runner + domain + migrations (+ optional blobs)
+  frontend/     per frontend:   SPA (S3 + CloudFront + ACM + ALIAS records)
 factory/    tfe provider — stamps all workspaces + vars from clients.auto.tfvars
 examples/   foundation/service tfvars + app-repo GitHub workflows
-docs/       onboarding · contracts · apply-order · adr/
+docs/       puesta-en-marcha.md · arquitectura/ · runbook-alta-cliente.md · deuda-tecnica.md · contracts · adr/
 ```
 
 ## Quick start

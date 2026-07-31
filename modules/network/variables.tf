@@ -22,7 +22,13 @@ variable "enable_nat" {
 }
 
 variable "enable_bastion" {
-  description = "Create the SSM bastion for DB admin access."
+  description = "Create the SSM bastion for DB admin access. Off by default — it's only for occasional manual DB admin; enable it for a session, then disable. Apps/migrations reach RDS without it."
+  type        = bool
+  default     = false
+}
+
+variable "enable_s3_endpoint" {
+  description = "Create the free S3 gateway VPC endpoint (routes S3/ECR-layer traffic off the NAT)."
   type        = bool
   default     = true
 }

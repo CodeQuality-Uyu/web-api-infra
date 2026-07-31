@@ -8,13 +8,14 @@ variable "environment" {
   type        = string
 }
 
-variable "aws_region" {
-  type    = string
-  default = "us-east-1"
-}
-
 variable "tfc_organization" {
   description = "HCP Terraform organization (for reading consumer foundations' remote state)."
+  type        = string
+  default     = null
+}
+
+variable "aws_account_id" {
+  description = "AWS account this client-env must deploy into. Enforced via allowed_account_ids — a credential for any other account fails the plan instead of creating resources in the wrong place. Set by the factory."
   type        = string
   default     = null
 }
@@ -28,6 +29,12 @@ variable "enable_nat" {
   description = "NAT gateway — needed only if apps make outbound internet calls."
   type        = bool
   default     = true
+}
+
+variable "enable_bastion" {
+  description = "SSM bastion for occasional manual DB admin. Off by default (on-demand); enable for a session, then disable. Apps/migrations reach RDS without it."
+  type        = bool
+  default     = false
 }
 
 variable "zone_name" {
@@ -96,10 +103,37 @@ variable "db_skip_final_snapshot" {
   default = false
 }
 
+# --- Automatic DNS delegation (optional) ---
+# When both are set, the foundation writes its zone's NS records into the PARENT zone
+# (ecolors.app) cross-account, so the subdomain delegates itself. Unset = manual delegation.
+variable "dns_parent_zone_id" {
+  description = "Hosted zone id of the parent zone (ecolors.app), in the DNS-owning account."
+  type        = string
+  default     = null
+}
+
+variable "dns_delegation_role_arn" {
+  description = "ARN of the dns-delegation role (in the DNS-owning account) this foundation assumes to write its NS records."
+  type        = string
+  default     = null
+}
+
 variable "enable_github_oidc" {
-  description = "Create the GitHub Actions OIDC provider (once per account) for migrations CI."
+  description = "Create the GitHub Actions OIDC provider (once per account) for migrations CI + the deploy role."
   type        = bool
   default     = true
+}
+
+variable "github_repos" {
+  description = "App repos that deploy into this account (org/repo). Drives the github-deploy role's trust. Set by the factory."
+  type        = list(string)
+  default     = []
+}
+
+variable "frontend_buckets" {
+  description = "Frontend S3 bucket names in this client-env; the github-deploy role may sync into them. Set by the factory."
+  type        = list(string)
+  default     = []
 }
 
 variable "tags" {

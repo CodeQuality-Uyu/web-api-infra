@@ -1,5 +1,9 @@
 provider "aws" {
-  region = var.aws_region
+  region = "us-east-1"
+
+  # Guardrail: fail the plan if the run's credentials belong to another account.
+  allowed_account_ids = var.aws_account_id != null ? [var.aws_account_id] : null
+
   default_tags {
     tags = {
       Client      = var.client
@@ -13,6 +17,7 @@ provider "aws" {
 
 # CloudFront ACM certs must live in us-east-1 (only used by the optional blobs module).
 provider "aws" {
-  alias  = "us_east_1"
-  region = "us-east-1"
+  alias               = "us_east_1"
+  region              = "us-east-1"
+  allowed_account_ids = var.aws_account_id != null ? [var.aws_account_id] : null
 }

@@ -81,6 +81,12 @@ variable "kms_key_arns" {
   default     = []
 }
 
+variable "blobs_bucket_arn" {
+  description = "ARN of the blobs bucket this app reads/writes at runtime. Null = the app has no blob storage; grants no S3 access."
+  type        = string
+  default     = null
+}
+
 variable "tags" {
   type    = map(string)
   default = {}

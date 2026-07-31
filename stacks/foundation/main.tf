@@ -9,10 +9,11 @@ locals {
 module "network" {
   source = "../../modules/network"
 
-  name        = local.name
-  cidr_block  = var.vpc_cidr
-  enable_nat  = var.enable_nat
-  tags        = local.tags
+  name           = local.name
+  cidr_block     = var.vpc_cidr
+  enable_nat     = var.enable_nat
+  enable_bastion = var.enable_bastion
+  tags           = local.tags
 }
 
 module "dns" {
@@ -70,4 +71,17 @@ resource "aws_iam_openid_connect_provider" "github" {
   client_id_list  = ["sts.amazonaws.com"]
   thumbprint_list = ["6938fd4d98bab03faadb97b34396831e3780aea1"]
   tags            = local.tags
+}
+
+# The github-deploy role: GitHub Actions push images to the ECR repos this stack owns and sync
+# builds into the FE buckets. ECR repo creation stays with the foundation (not the CI).
+module "github_deploy" {
+  source = "../../modules/github-deploy-role"
+  count  = var.enable_github_oidc && length(var.github_repos) > 0 ? 1 : 0
+
+  oidc_provider_arn    = aws_iam_openid_connect_provider.github[0].arn
+  github_repos         = var.github_repos
+  ecr_repository_arns  = values(module.ecr.repository_arns)
+  frontend_bucket_arns = [for b in var.frontend_buckets : "arn:aws:s3:::${b}"]
+  tags                 = local.tags
 }

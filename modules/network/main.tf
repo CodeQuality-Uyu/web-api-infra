@@ -2,6 +2,19 @@ data "aws_availability_zones" "available" {
   state = "available"
 }
 
+data "aws_region" "current" {}
+
+# Free S3 gateway endpoint: traffic to S3 (ECR image layers live in S3) goes here instead of
+# through the NAT Gateway, cutting NAT data-processing cost. Gateway endpoints have no hourly fee.
+resource "aws_vpc_endpoint" "s3" {
+  count             = var.enable_s3_endpoint ? 1 : 0
+  vpc_id            = aws_vpc.this.id
+  service_name      = "com.amazonaws.${data.aws_region.current.name}.s3"
+  vpc_endpoint_type = "Gateway"
+  route_table_ids   = aws_route_table.private[*].id
+  tags              = merge(var.tags, { Name = "${var.name}-s3-endpoint" })
+}
+
 locals {
   azs          = slice(data.aws_availability_zones.available.names, 0, var.az_count)
   public_cidrs = [for i in range(var.az_count) : cidrsubnet(var.cidr_block, 8, i)]

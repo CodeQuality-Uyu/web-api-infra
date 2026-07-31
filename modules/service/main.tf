@@ -47,13 +47,21 @@ resource "aws_iam_role" "instance" {
   tags               = var.tags
 }
 
-data "aws_iam_policy_document" "instance" {
-  count = length(var.secret_source_arns) > 0 ? 1 : 0
+locals {
+  # The instance role needs a policy if it reads secrets OR touches the blobs bucket at runtime.
+  need_instance_policy = length(var.secret_source_arns) > 0 || var.blobs_bucket_arn != null
+}
 
-  statement {
-    sid       = "ReadSecrets"
-    actions   = ["ssm:GetParameters", "ssm:GetParameter", "secretsmanager:GetSecretValue"]
-    resources = var.secret_source_arns
+data "aws_iam_policy_document" "instance" {
+  count = local.need_instance_policy ? 1 : 0
+
+  dynamic "statement" {
+    for_each = length(var.secret_source_arns) > 0 ? [1] : []
+    content {
+      sid       = "ReadSecrets"
+      actions   = ["ssm:GetParameters", "ssm:GetParameter", "secretsmanager:GetSecretValue"]
+      resources = var.secret_source_arns
+    }
   }
 
   dynamic "statement" {
@@ -64,10 +72,31 @@ data "aws_iam_policy_document" "instance" {
       resources = var.kms_key_arns
     }
   }
+
+  # Blobs: the app puts/gets/deletes objects and signs presigned PUT/GET URLs against this bucket.
+  dynamic "statement" {
+    for_each = var.blobs_bucket_arn != null ? [1] : []
+    content {
+      sid       = "BlobsObjects"
+      actions   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+      resources = ["${var.blobs_bucket_arn}/*"]
+    }
+  }
+
+  # ListBucket on the bucket itself: without it, GetObject on a missing key returns 403 (not 404),
+  # and the app's "not found" handling keys off the 404. Scoped to the bucket, not its objects.
+  dynamic "statement" {
+    for_each = var.blobs_bucket_arn != null ? [1] : []
+    content {
+      sid       = "BlobsList"
+      actions   = ["s3:ListBucket"]
+      resources = [var.blobs_bucket_arn]
+    }
+  }
 }
 
 resource "aws_iam_role_policy" "instance" {
-  count  = length(var.secret_source_arns) > 0 ? 1 : 0
+  count  = local.need_instance_policy ? 1 : 0
   name   = "${var.name}-apprunner-instance-policy"
   role   = aws_iam_role.instance.id
   policy = data.aws_iam_policy_document.instance[0].json

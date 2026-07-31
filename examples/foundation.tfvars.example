@@ -1,8 +1,10 @@
 # Variables for a foundation workspace (one per client-env).
 client      = "sayer"
 environment = "dev"
-aws_region  = "us-east-1"
+# Region is fixed to us-east-1 in each stack's provider — not a variable.
 vpc_cidr    = "10.20.0.0/16"
+# Guardrail: the plan fails if the run's credentials belong to a different AWS account.
+aws_account_id = "111111111111"
 zone_name   = "sayer.ecolors.app"
 create_zone = true
 enable_nat  = true

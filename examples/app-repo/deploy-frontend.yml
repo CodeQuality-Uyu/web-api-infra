@@ -1,0 +1,81 @@
+# Lives in the FRONTEND repo (e.g. CodeQuality-Uyu/ecolors-react-web) as .github/workflows/deploy.yml
+#
+# Terraform (the frontend stack) creates the hosting — S3 bucket + CloudFront + cert + DNS.
+# THIS workflow only publishes content into it. It does NOT bump any Terraform / TFC variable:
+# the version is declarative in git. To record a release, bump `frontends[].version` in
+# web-api-infra/factory/clients.auto.tfvars.
+#
+# Naming (owned by the foundation/frontend stacks):
+#   bucket = {client}-{name}-{env}-web   e.g. ecolors-seller-nonprod-web
+#
+# One React app, many tenants: the matrix builds once per target (different API base + app id)
+# and syncs each to its own bucket. Buckets in OTHER accounts (sayer, ulbrika) need that
+# account's github-deploy role — add them as separate jobs, one role each.
+name: deploy-frontend
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  DEPLOY_ROLE_ARN: arn:aws:iam::273733837144:role/github-deploy # foundation output: github_deploy_role_arn
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - bucket: ecolors-seller-nonprod-web
+            distribution_id: REPLACE_SELLER_DIST
+            api_base_url: https://seller.api.nonprod.ecolors.app
+            licensee_app_id: seller
+          - bucket: ecolors-demo-nonprod-web
+            distribution_id: REPLACE_DEMO_DIST
+            api_base_url: https://demo.api.nonprod.ecolors.app
+            licensee_app_id: demo
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+      - name: Build
+        run: npm run build # emits ./dist
+        env:
+          VITE_API_URL: ${{ matrix.api_base_url }}
+          VITE_LICENSEE_APP_ID: ${{ matrix.licensee_app_id }}
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # Upload the build under an IMMUTABLE "<version>/" prefix. Previous versions stay in the
+      # bucket untouched, so a rollback is just repointing CloudFront (no rebuild). This does NOT
+      # make the version live — Terraform's origin_path does, once you bump the version in
+      # clients.auto.tfvars. --delete is scoped to this prefix, so it never touches other versions.
+      #
+      # Hashed assets are content-addressed -> cache hard. index.html must revalidate so the
+      # cutover is picked up as soon as origin_path moves.
+      - name: Upload assets (long cache)
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          aws s3 sync ./dist "s3://${{ matrix.bucket }}/${VERSION}" --delete --exclude index.html --cache-control "public,max-age=31536000,immutable"
+
+      - name: Upload index.html (no cache)
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          aws s3 cp ./dist/index.html "s3://${{ matrix.bucket }}/${VERSION}/index.html" --cache-control "no-cache,no-store,must-revalidate"
+
+      - name: Reminder
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "Uploaded s3://${{ matrix.bucket }}/${VERSION}/ — promote it by setting this frontend's version to ${VERSION} in web-api-infra/clients.auto.tfvars and applying."

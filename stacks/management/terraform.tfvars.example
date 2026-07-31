@@ -1,0 +1,43 @@
+# Variables del workspace `management` (cuenta raíz CCL). Copiá los valores como variables del
+# workspace en HCP, o usá este archivo para un apply local de prueba.
+
+management_account_id = "975050152436" # cuenta raíz CCL
+
+# --- Cuentas de plataforma (no-workload, bajo OUs funcionales) ---
+# infrastructure: DNS compartido (ecolors.app + rol de delegación). finops: tooling de costos.
+platform_accounts = [
+  { name = "infrastructure", ou = "Infrastructure", email = "aws-infrastructure@ccl.com" },
+  { name = "finops", ou = "Infrastructure", email = "aws-finops@ccl.com" },
+  # { name = "log-archive", ou = "Security", email = "aws-log-archive@ccl.com" },
+]
+
+# --- Acceso humano (IAM Identity Center) ---
+# El default de `access` trae un permission set BillingReadOnly; ajustá el nombre del grupo real.
+
+# --- Vending de cuentas (environment-first, arquitectura NUEVA) ---
+# Se crean las OUs funcionales (Security, Infrastructure, Workloads/Prod, Workloads/NonProd,
+# Suspended) y las cuentas nuevas caen en Workloads/<env>. El tenant es el tag `Tenant`, no una OU.
+# Las OUs viejas (EColors/Sayer/Ulbrika) y sus cuentas ECS+ALB se decomisionan a mano (mover a
+# Suspended y cerrar). Cada email tiene que ser REAL, único y NUNCA usado en AWS (los viejos
+# siguen ocupados por las cuentas viejas, por eso van con prefijo aws-).
+clients_to_vend = [
+  {
+    client = "ecolors"
+    environments = [
+      { env = "prod", email = "aws-ecolors-prod@ccl.com" },
+      { env = "nonprod", email = "aws-ecolors-nonprod@ccl.com" },
+    ]
+  },
+  {
+    client = "sayer"
+    environments = [
+      { env = "prod", email = "aws-sayer-prod@ccl.com" },
+    ]
+  },
+  {
+    client = "ulbrika"
+    environments = [
+      { env = "prod", email = "aws-ulbrika-prod@ccl.com" },
+    ]
+  },
+]
